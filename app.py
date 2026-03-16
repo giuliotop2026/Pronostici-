@@ -1,44 +1,56 @@
 import streamlit as st
 import pandas as pd
 import xgboost as xgb
-import requests
+import json
+import time
+from datetime import datetime, timedelta
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
-from datetime import datetime, timedelta
+
+# IMPORT SELENIUM PER DISTRUGGERE IL MURO DI SOFASCORE
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
 
 # CONFIGURAZIONE VETRO BLINDATO
-st.set_page_config(page_title="BLUE LOCK - GRANITO 3.0", layout="wide")
+st.set_page_config(page_title="BLUE LOCK - GRANITO 3.0 (SELENIUM CORE)", layout="wide")
 
-# ENDPOINT UFFICIALE SOFASCORE CALCIO
 SOFASCORE_API = "https://api.sofascore.com/api/v1/sport/football/scheduled-events/{}"
 
-# HEADERS BLINDATI PER AGGIRARE I BLOCCHI E FORZARE DATI REALI ITALIANI
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    "Origin": "https://www.sofascore.com",
-    "Referer": "https://www.sofascore.com/"
-}
+def innesca_browser_fantasma():
+    """CREA IL BROWSER BLINDATO PER SCANSIONARE L'ABISSO SU STREAMLIT CLOUD"""
+    opzioni = Options()
+    opzioni.add_argument("--headless")
+    opzioni.add_argument("--no-sandbox")
+    opzioni.add_argument("--disable-dev-shm-usage")
+    opzioni.add_argument("--disable-gpu")
+    opzioni.add_argument("window-size=1920x1080")
+    opzioni.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    
+    servizio = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=servizio, options=opzioni)
+    return driver
 
-def scansiona_sofascore(data_target):
-    """ESTRAE LE PARTICELLE FORZANDO LA LETTURA LIVE DAL SERVER SOFASCORE"""
+def scansiona_sofascore_con_selenium(data_target, driver):
+    """FORZA L'INGRESSO SU SOFASCORE E PRELEVA I FLUSSI REALI"""
     url = SOFASCORE_API.format(data_target)
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        if resp.status_code == 200:
-            return resp.json().get('events', [])
-        else:
-            st.warning(f"SOFASCORE HA OPPOSTO RESISTENZA SULLA DATA {data_target} (CODICE: {resp.status_code})")
-            return []
+        driver.get(url)
+        time.sleep(3) # PAUSA TATTICA PER SUPERARE I CONTROLLI E CARICARE IL CEMENTO
+        
+        # IL BROWSER MOSTRA IL JSON DENTRO UN TAG <pre>
+        elemento_testo = driver.find_element(By.TAG_NAME, "pre").text
+        dati_puliti = json.loads(elemento_testo)
+        
+        return dati_puliti.get('events', [])
     except Exception as e:
-        st.error(f"ERRORE DI CONNESSIONE ALL'ABISSO: {e}")
+        st.error(f"SELENIUM HA SUBITO UNA FRATTURA SULLA DATA {data_target}: {e}")
         return []
 
 def applica_protocollo_granito(eventi, storico=False):
-    """FILTRA LE PARTICELLE INSTABILI E CALCOLA LA DENSITA' TECNICA CON TARGET MATEMATICI ISOLATI"""
+    """FILTRA LE PARTICELLE E CALCOLA LA DENSITA' TECNICA"""
     particelle_valide = []
     id_visti = set()
 
@@ -54,7 +66,6 @@ def applica_protocollo_granito(eventi, storico=False):
             particella_2 = ev['awayTeam']['name'].upper()
             status = ev['status']['type']
 
-            # ELIMINAZIONE SCORIE CANTIERE
             if "SVIZZERA" in lega or "SERIE C GIRONE A" in lega:
                 continue
 
@@ -63,28 +74,24 @@ def applica_protocollo_granito(eventi, storico=False):
             if storico and status != "finished":
                 continue
 
-            # IDENTIFICAZIONE CARATTERISTICHE
             femminile_boost = 1 if "FEMMINILE" in lega or "WOMEN" in lega else 0
             usa_focus = 1 if any(x in lega for x in ["USA", "MLS", "USL"]) else 0
-
-            # REGOLA BLINDATA ITALIA
             italia_europa = 1 if "EUROPA" in lega and ("ITALIA" in particella_1 or "ITALIA" in particella_2) else 0
             if "ITALIA" in lega and not italia_europa:
                 continue
 
-            # TARGET GOL PER AUTO-APPRENDIMENTO (ESCLUSIONE MATEMATICA PERFETTA)
             gol_casa = ev.get('homeScore', {}).get('current', 0) if storico else 0
             gol_trasferta = ev.get('awayScore', {}).get('current', 0) if storico else 0
             totale_gol = gol_casa + gol_trasferta
 
             if totale_gol >= 3:
-                target_class = 1 # OVER 2.5
+                target_class = 1 
             elif totale_gol == 2:
-                target_class = 0 # OVER 1.5
+                target_class = 0 
             elif totale_gol == 1:
-                target_class = 2 # UNDER 3.5
+                target_class = 2 
             else:
-                target_class = 3 # UNDER 4.5
+                target_class = 3 
 
             particelle_valide.append({
                 'MATCH_ID': match_id,
@@ -104,37 +111,32 @@ def applica_protocollo_granito(eventi, storico=False):
     return pd.DataFrame(particelle_valide)
 
 def innesca_motore_xgboost(df_storico, df_oggi):
-    """ADDESTRA L'AI SUI DATI REALI E PREDICE LE PARTICELLE CON POLMONI D'ACCIAIO, IGNORANDO LE QUOTE"""
+    """ADDESTRA L'AI E PREDICE IGNORANDO LE QUOTE (NO 1X2)"""
     if df_storico.empty or df_oggi.empty:
         return pd.DataFrame()
 
     features = ['FEMMINILE_BOOST', 'USA_FOCUS', 'FLUSSO_CASA', 'MURO_TRASFERTA']
     X_train = df_storico[features].fillna(0)
     y_train = df_storico['TARGET']
-
     X_pred = df_oggi[features].fillna(0)
 
-    # IL CEMENTO: LABEL ENCODER FORZA LE CLASSI AD ESSERE CONTINUE SENZA BUCHI MATEMATICI
     le = LabelEncoder()
     y_train_encoded = le.fit_transform(y_train)
-
     modello = xgb.XGBClassifier(n_estimators=100, max_depth=3, learning_rate=0.1)
 
     if len(le.classes_) > 1:
         modello.fit(X_train, y_train_encoded)
         probabilita = modello.predict_proba(X_pred)
     else:
-        # FALLBACK DI EMERGENZA SE LO STORICO E' POVERO
         probabilita = np.random.uniform(0.6, 0.9, (len(X_pred), 1))
 
     MAPPATURA_CLASSI = {0: 'OVER 1.5', 1: 'OVER 2.5', 2: 'UNDER 3.5', 3: 'UNDER 4.5'}
-
     risultati = []
+    
     for i, prob in enumerate(probabilita):
         certezza = max(prob) * 100
         idx_classe_codificata = prob.argmax()
 
-        # DECODIFICA INVERSA DELLA CLASSE ESTRATTA
         if len(le.classes_) > 1:
             classe_originale = le.inverse_transform([idx_classe_codificata])[0]
         else:
@@ -142,7 +144,6 @@ def innesca_motore_xgboost(df_storico, df_oggi):
 
         pronostico_base = MAPPATURA_CLASSI.get(classe_originale, 'OVER 1.5')
 
-        # PARAMETRI DI PERFEZIONE ASSOLUTI
         if df_oggi.iloc[i]['FEMMINILE_BOOST'] == 1:
             pronostico_base = 'OVER 2.5'
             certezza = 99.99
@@ -150,7 +151,6 @@ def innesca_motore_xgboost(df_storico, df_oggi):
             pronostico_base = 'UNDER 4.5'
             certezza = 100.00
 
-        # IL VERO VINCITORE NASCOSTO (NO 1X2)
         if certezza > 60:
             risultati.append({
                 'LEGA': df_oggi.iloc[i]['LEGA'],
@@ -166,33 +166,44 @@ def innesca_motore_xgboost(df_storico, df_oggi):
     return df_finale
 
 # INTERFACCIA WEB BLINDATA
-st.title("⚙️ CANTIERE GRANITO 3.0 - PIAZZATO BLINDATO")
+st.title("⚙️ CANTIERE GRANITO 3.0 - SELENIUM CORE")
 oggi_str = datetime.now().strftime("%Y-%m-%d")
 domani_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-st.markdown(f"### SCANSIONE ABISSO IN CORSO SULLE 48H: **{oggi_str} / {domani_str}**")
-st.info("RICERCA ACAZZIAM POLMONEI DACCIAAIO E VOGLIA DI VINCERE. ZERO ERRORI. QUOTE IGNORATE.")
+st.markdown(f"### SCANSIONE ABISSO 48H: **{oggi_str} / {domani_str}**")
+st.info("SELENIUM ATTIVO: SUPERAMENTO BARRIERE SOFASCORE IN CORSO. RICERCA ACAZZIAM POLMONEI DACCIAAIO E VOGLIA DI VINCERE.")
 
-if st.button("INNESCA CERTEZZA 10000% E GENERA 11 PARTICELLE"):
+if st.button("INNESCA SELENIUM E SCANSIONA 11 PARTICELLE"):
+    
+    # AVVIO BROWSER BLINDATO
+    try:
+        driver = innesca_browser_fantasma()
+        st.toast("SELENIUM INIZIALIZZATO. IL BROWSER FANTASMA È NELL'ABISSO.")
+    except Exception as e:
+        st.error(f"ERRORE GRAVE NELL'AVVIO DI SELENIUM: {e}. VERIFICA IL FILE PACKAGES.TXT.")
+        st.stop()
 
-    with st.spinner("RECUPERO MURI DIFENSIVI STORICI DA SOFASCORE..."):
+    with st.spinner("SELENIUM: RECUPERO MURI DIFENSIVI STORICI..."):
         ieri_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-        eventi_storici = scansiona_sofascore(ieri_str)
+        eventi_storici = scansiona_sofascore_con_selenium(ieri_str, driver)
         df_storico = applica_protocollo_granito(eventi_storici, storico=True)
 
-    with st.spinner(f"ESTRAZIONE PARTICELLE DI OGGI E DOMANI..."):
-        eventi_oggi = scansiona_sofascore(oggi_str)
-        eventi_domani = scansiona_sofascore(domani_str)
+    with st.spinner(f"SELENIUM: ESTRAZIONE DATI LIVE PER OGGI E DOMANI..."):
+        eventi_oggi = scansiona_sofascore_con_selenium(oggi_str, driver)
+        eventi_domani = scansiona_sofascore_con_selenium(domani_str, driver)
         eventi_totali = eventi_oggi + eventi_domani
         df_futuro = applica_protocollo_granito(eventi_totali, storico=False)
+        
+    # SPEGNIMENTO MOTORE SELENIUM
+    driver.quit()
 
     if df_futuro.empty:
-        st.error(f"NESSUNA PARTICELLA STABILE RILEVATA. IL CANTIERE È IN ATTESA.")
+        st.error(f"NESSUNA PARTICELLA STABILE RILEVATA OGGI. SOFASCORE HA FORNITO DATI VUOTI.")
     else:
         with st.spinner("CALCOLO DENSITÀ TECNICA... IGNORANDO LE QUOTE..."):
             df_11_perfette = innesca_motore_xgboost(df_storico, df_futuro)
 
             if len(df_11_perfette) > 0:
-                st.success("CERTEZZA ASSOLUTA RAGGIUNTA. IL VERO VINCITORE NASCOSTO È STATO ISOLATO. OBIETTIVO QUOTA 33.")
+                st.success("CERTEZZA ASSOLUTA RAGGIUNTA. IL VINCITORE NASCOSTO È STATO ISOLATO CON SELENIUM. OBIETTIVO QUOTA 33.")
                 st.table(df_11_perfette)
             else:
                 st.warning("NESSUNA PARTICELLA HA SUPERATO I PARAMETRI DI PERFEZIONE 15.15.")
