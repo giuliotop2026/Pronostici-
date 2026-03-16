@@ -3,4 +3,6 @@ pandas
 xgboost
 requests
 scikit-learn
+selenium
+webdriver-manager
 
