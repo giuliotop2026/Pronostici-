@@ -20,7 +20,7 @@ st.set_page_config(page_title="BLUE LOCK - GRANITO 3.0 (SELENIUM CORE)", layout=
 SOFASCORE_API = "https://api.sofascore.com/api/v1/sport/football/scheduled-events/{}"
 
 def innesca_browser_fantasma():
-    """CREA IL BROWSER BLINDATO PER SCANSIONARE L'ABISSO SU STREAMLIT CLOUD"""
+    """CREA IL BROWSER BLINDATO PUNTANDO DIRETTAMENTE AL MOTORE FISICO DEL SERVER"""
     opzioni = Options()
     opzioni.add_argument("--headless")
     opzioni.add_argument("--no-sandbox")
@@ -29,9 +29,13 @@ def innesca_browser_fantasma():
     opzioni.add_argument("window-size=1920x1080")
     opzioni.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
-    servizio = Service(ChromeDriverManager().install())
+    # IL CEMENTO DEFINITIVO: INDICHIAMO I PERCORSI ESATTI DEI BINARI LINUX SU STREAMLIT CLOUD
+    opzioni.binary_location = "/usr/bin/chromium"
+    servizio = Service("/usr/bin/chromedriver")
+    
     driver = webdriver.Chrome(service=servizio, options=opzioni)
     return driver
+    
 
 def scansiona_sofascore_con_selenium(data_target, driver):
     """FORZA L'INGRESSO SU SOFASCORE E PRELEVA I FLUSSI REALI"""
